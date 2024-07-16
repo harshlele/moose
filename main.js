@@ -23,7 +23,8 @@ const createWindow = () => {
         })
 
         win.loadFile('index.html');
-        let url = new Url('https://browser.engineering/');
+        let url = new Url('https://browser.engineering/examples/example1-simple.html');
+        url.print();
         url.request().then(res => {
             console.log('Url connect response');
             printPage(res);

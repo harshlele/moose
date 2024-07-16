@@ -17,8 +17,10 @@ class Url {
         if (!rest.includes('/'))
             rest += '/';
 
-        let [hostname, path] = rest.split('/');
+        let [hostname, ...path] = rest.split('/');
         console.assert(typeof (hostname) == 'string' && hostname != '');
+
+        path = path.length > 1 ? path.join('/') : path[0];
 
         if(hostname.includes(':'))
             [hostname, this.port] = hostname.split(':');
@@ -36,6 +38,7 @@ class Url {
     print() {
         console.log(this.scheme);
         console.log(this.hostname);
+        console.log(this.port);
         console.log(this.path);
     }
 
