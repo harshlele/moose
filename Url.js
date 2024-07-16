@@ -1,5 +1,5 @@
 const net = require('node:net');
-
+const tls = require('node:tls');
 
 class Url {
     /**
@@ -19,6 +19,11 @@ class Url {
 
         let [hostname, path] = rest.split('/');
         console.assert(typeof (hostname) == 'string' && hostname != '');
+
+        if(hostname.includes(':'))
+            [hostname, this.port] = hostname.split(':');
+        else
+            this.port = scheme == 'https' ? 443 : 80;
 
         this.scheme = scheme;
         this.hostname = hostname;
@@ -40,7 +45,14 @@ class Url {
      */
     request() {
         return new Promise((resolve, reject) => {
-            let socket = new net.Socket();
+            
+            let socket;
+            
+            if(this.scheme == 'https')
+                socket = new tls.TLSSocket();
+            else
+                socket = new net.Socket();
+
             let response = [];
 
             socket.on('error', (err) => {
@@ -64,27 +76,28 @@ class Url {
                  
                 }
                 console.log(headers);
-                
+
                 console.assert(!headers.hasOwnProperty('transfer-encoding') && !headers.hasOwnProperty('content-encoding'));
                 
                 resolve(response.join(''));
             });
 
-            if (this.scheme == 'http') {
-                socket.connect(
-                    80,
-                    this.hostname,
-                    () => {
-                        let request = `GET ${this.path} HTTP/1.0\r\n`;
-                        request += `Host: ${this.hostname}\r\n`;
-                        request += '\r\n';
+            socket.connect(
+                this.port,
+                this.hostname,
+                () => {
+                    let request = `GET ${this.path} HTTP/1.0\r\n`;
+                    request += `Host: ${this.hostname}\r\n`;
+                    request += '\r\n';
 
-                        socket.write(request, (err) => {
-                            if (err)
-                                reject(err);
-                        });
+                    socket.write(request, (err) => {
+                        
+                        if (err)
+                            reject(err);
+
                     });
-            }
+                });
+
         });
     }
 }
