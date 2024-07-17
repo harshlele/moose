@@ -1,39 +1,59 @@
 const net = require('node:net');
 const tls = require('node:tls');
+const fs = require('node:fs');
 
 class Url {
     /**
-     * Splits url into scheme, hostname and path
+     * Splits url into scheme, hostname, path and port
      * @param {string} url 
      */
     constructor(url) {
-        console.assert(typeof (url) == 'string');
+        console.assert(typeof (url) == 'string' && url.trim() != '', `passed url not a string: ${url}`);
         this.url = url;
 
+        //handle the data scheme here because its quite different than the others
+        if(url.includes('data:')){
+            this.scheme = 'data';
+            let [_, rest] = url.split(':');
+            console.assert(typeof(rest) == 'string' && rest.trim() != '');
+            let [contentType, content] = rest.split(',');
+            this.contentType = contentType;
+            this.content = content;
+            return;
+        }
+
         let [scheme, rest] = url.split('://');
-        console.assert(typeof (scheme) == 'string' && typeof rest == 'string');
 
+        console.assert(typeof (scheme) == 'string' && typeof rest == 'string', `malformed scheme/rest: ${scheme}://${rest}`);
 
-        if (!rest.includes('/'))
-            rest += '/';
+        //handle file urls
+        if (scheme == 'file') {
+            this.scheme = scheme;
+            this.path = rest;
+        }
+        else {
+            if (!rest.includes('/'))
+                rest += '/';
 
-        let [hostname, ...path] = rest.split('/');
-        console.assert(typeof (hostname) == 'string' && hostname != '');
+            let [hostname, ...path] = rest.split('/');
+            console.assert(typeof (hostname) == 'string' && hostname.trim() != '', `Malformed url: ${rest}`);
 
-        path = path.length > 1 ? path.join('/') : path[0];
+            path = path.length > 1 ? path.join('/') : path[0];
 
-        if(hostname.includes(':'))
-            [hostname, this.port] = hostname.split(':');
-        else
-            this.port = scheme == 'https' ? 443 : 80;
+            if (hostname.includes(':'))
+                [hostname, this.port] = hostname.split(':');
+            else
+                this.port = scheme == 'https' ? 443 : 80;
 
-        this.scheme = scheme;
-        this.hostname = hostname;
-        this.path = '/' + path;
+            this.scheme = scheme;
+            this.hostname = hostname;
+            this.path = '/' + path;
+        }
+
     }
 
     /**
-     * Prints the scheme, hostname and path separately
+     * Prints the scheme, hostname, port and path separately
      */
     print() {
         console.log(this.scheme);
@@ -47,61 +67,83 @@ class Url {
      * @returns a promise that resolves with the response, or rejects with the error
      */
     request() {
-        return new Promise((resolve, reject) => {
-            
-            let socket;
-            
-            if(this.scheme == 'https')
-                socket = new tls.TLSSocket();
-            else
-                socket = new net.Socket();
-
-            let response = [];
-
-            socket.on('error', (err) => {
-                reject(err);
+        if (this.scheme == 'file') {
+            return new Promise((resolve, reject) => {
+                fs.readFile(this.path,(err,data) => {
+                    if(err || !data)
+                        reject(err);
+                    else
+                        resolve(data.toString());
+                });
             });
-            socket.on('data', (d) => {
-                response.push(...d.toString().split('\r\n'));
+        }
+        else if(this.scheme == 'data'){
+            return new Promise((resolve,_) => {
+                resolve(this.content);
             });
-            socket.on('end', () => {
-                socket.destroy();
+        }
+        else {
+            return new Promise((resolve, reject) => {
 
-                let [version, status, exp] = response.shift().split(' ');
-                
-                let headers = {};
-                while(response[0] != ''){
-                    let [key,val] = response.shift().split(':');
-                    
-                    console.assert(typeof(key) == 'string' && key != '' && typeof(val) == 'string' && val != '', `Weirdly formatted key/value: ${key}: ${val}`);
-                    
-                    headers[key.toLowerCase()] = val.trim();
-                 
-                }
-                console.log(headers);
+                let socket;
 
-                console.assert(!headers.hasOwnProperty('transfer-encoding') && !headers.hasOwnProperty('content-encoding'));
-                
-                resolve(response.join(''));
-            });
+                if (this.scheme == 'https')
+                    socket = new tls.TLSSocket();
+                else
+                    socket = new net.Socket();
 
-            socket.connect(
-                this.port,
-                this.hostname,
-                () => {
-                    let request = `GET ${this.path} HTTP/1.0\r\n`;
-                    request += `Host: ${this.hostname}\r\n`;
-                    request += '\r\n';
+                let response = [];
 
-                    socket.write(request, (err) => {
-                        
-                        if (err)
-                            reject(err);
+                socket.on('error', (err) => {
+                    reject(err);
+                });
+                socket.on('data', (d) => {
+                    response.push(...d.toString().split('\r\n'));
+                });
+                socket.on('end', () => {
+                    socket.destroy();
 
-                    });
+                    let [version, status, msg] = response.shift().split(' ');
+
+                    let headers = {};
+                    while (response[0] != '') {
+                        let [key, val] = response.shift().split(':');
+
+                        console.assert(typeof (key) == 'string' && key.trim() != '' && typeof (val) == 'string' && val.trim() != '', `Weirdly formatted key/value: ${key}: ${val}`);
+
+                        headers[key.toLowerCase()] = val.trim();
+
+                    }
+                    console.log(headers);
+
+                    console.assert(!headers.hasOwnProperty('transfer-encoding') && !headers.hasOwnProperty('content-encoding'));
+
+                    resolve(response.join(''));
                 });
 
-        });
+                socket.connect(
+                    this.port,
+                    this.hostname,
+                    () => {
+                        let request = `GET ${this.path} HTTP/1.1\r\n`;
+
+                        request += `Host: ${this.hostname}\r\n`;
+                        request += `Connection: close\r\n`;
+                        request += `User-Agent: Moose\r\n`
+                        request += '\r\n';
+
+                        socket.write(request, (err) => {
+
+                            if (err)
+                                reject(err);
+
+                        });
+                    });
+
+            });
+        }
+
+
     }
 }
 
