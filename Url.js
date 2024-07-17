@@ -12,7 +12,7 @@ class Url {
         this.url = url;
 
         //handle the data scheme here because its quite different than the others
-        if(url.includes('data:')){
+        if(url.indexOf('data:') == 0){
             this.scheme = 'data';
             let [_, rest] = url.split(':');
             console.assert(typeof(rest) == 'string' && rest.trim() != '');
@@ -20,6 +20,10 @@ class Url {
             this.contentType = contentType;
             this.content = content;
             return;
+        }
+        else if(url.indexOf('view-source:') == 0){
+            this.scheme = 'view-source';   
+            url = url.substring(12);
         }
 
         let [scheme, rest] = url.split('://');
@@ -45,7 +49,9 @@ class Url {
             else
                 this.port = scheme == 'https' ? 443 : 80;
 
-            this.scheme = scheme;
+            if(this.scheme != 'view-source')
+                this.scheme = scheme;
+            
             this.hostname = hostname;
             this.path = '/' + path;
         }
@@ -64,22 +70,22 @@ class Url {
 
     /**
      * Makes a request to the url
-     * @returns a promise that resolves with the response, or rejects with the error
+     * @returns {Promise<object>} a promise that resolves with the response headers and content, or rejects with the error
      */
     request() {
         if (this.scheme == 'file') {
             return new Promise((resolve, reject) => {
                 fs.readFile(this.path,(err,data) => {
                     if(err || !data)
-                        reject(err);
+                        reject({err});
                     else
-                        resolve(data.toString());
+                        resolve({headers: {}, response: data.toString()});
                 });
             });
         }
         else if(this.scheme == 'data'){
             return new Promise((resolve,_) => {
-                resolve(this.content);
+                resolve({headers: {}, response: this.content});
             });
         }
         else {
@@ -95,21 +101,27 @@ class Url {
                 let response = [];
 
                 socket.on('error', (err) => {
-                    reject(err);
+                    reject({err});
                 });
                 socket.on('data', (d) => {
                     response.push(...d.toString().split('\r\n'));
                 });
                 socket.on('end', () => {
                     socket.destroy();
-
+                    
                     let [version, status, msg] = response.shift().split(' ');
 
-                    let headers = {};
+                    let headers = {
+                        [`http-version`]: version,
+                        status: +status, 
+                        msg
+                    };
                     while (response[0] != '') {
-                        let [key, val] = response.shift().split(':');
+                        let [key, ...val] = response.shift().split(':');
 
-                        console.assert(typeof (key) == 'string' && key.trim() != '' && typeof (val) == 'string' && val.trim() != '', `Weirdly formatted key/value: ${key}: ${val}`);
+                        console.assert(typeof (key) == 'string' && key.trim() != '', `Weirdly formatted key/value: ${key}: ${val}`);
+                        
+                        val = val.length > 1 ? val.join(':') : val[0]
 
                         headers[key.toLowerCase()] = val.trim();
 
@@ -117,8 +129,8 @@ class Url {
                     console.log(headers);
 
                     console.assert(!headers.hasOwnProperty('transfer-encoding') && !headers.hasOwnProperty('content-encoding'));
-
-                    resolve(response.join(''));
+                    
+                    resolve({headers,response: response.join('')});
                 });
 
                 socket.connect(
@@ -135,7 +147,7 @@ class Url {
                         socket.write(request, (err) => {
 
                             if (err)
-                                reject(err);
+                                reject({err});
 
                         });
                     });
