@@ -1,5 +1,5 @@
 const { app, BrowserWindow } = require('electron');
-const {Url} = require('./Url');
+const Url = require('./Url');
 
 const printPage = (page) => {
     let resp = '';
@@ -33,7 +33,7 @@ const printSource = (page) => {
 }
 
 const loadUrl = async () => {
-    let url = new Url('http://browser.engineering/redirect3');
+    let url = new Url('http://browser.engineering/redirect2');
     
     for(let i = 0; i < 10; i++){
         url.print();
@@ -78,7 +78,7 @@ app.whenReady().then(() => {
             createWindow();
         }
     });
-})
+});
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {

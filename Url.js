@@ -159,4 +159,5 @@ class Url {
     }
 }
 
-module.exports = { Url };
+
+module.exports = Url;
