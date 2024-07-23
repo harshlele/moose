@@ -1,3 +1,7 @@
+const url = 'http://example.org';
 
-console.log("app");
+window.addEventListener('load', async () => {
+    const pageText = await window.electronAPI.loadUrl(url);
+    console.log(pageText);
+});
 

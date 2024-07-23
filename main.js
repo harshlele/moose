@@ -1,5 +1,6 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const Url = require('./Url');
+const path = require('node:path');
 
 const printPage = (page) => {
     let resp = '';
@@ -16,7 +17,7 @@ const printPage = (page) => {
     
     resp = handleEntities(resp);
     
-    console.log(resp);
+    return resp;
 }
 
 /**
@@ -29,11 +30,14 @@ const handleEntities = (page) => {
 }
 
 const printSource = (page) => {
-    console.log(handleEntities(page));
+    return (handleEntities(page));
 }
 
-const loadUrl = async () => {
-    let url = new Url('http://browser.engineering/redirect2');
+const loadUrl = async (urlString) => {
+    if(!urlString)
+        return;
+
+    let url = new Url(urlString);
     
     for(let i = 0; i < 10; i++){
         url.print();
@@ -50,10 +54,10 @@ const loadUrl = async () => {
                 console.log('Url connect response');
                 
                 if(url.scheme == 'view-source')
-                    printSource(resp.response);
+                    return printSource(resp.response);
                 else
-                    printPage(resp.response);
-                break;
+                    return printPage(resp.response);
+                
             }
         }
     }
@@ -63,7 +67,10 @@ const loadUrl = async () => {
 const createWindow = () => {
         const win = new BrowserWindow({
             width: 800,
-            height: 600
+            height: 600,
+            webPreferences: {
+                preload: path.join(__dirname, 'preload.js')
+            }
         })
 
         win.loadFile('index.html');
@@ -71,6 +78,8 @@ const createWindow = () => {
     }
 
 app.whenReady().then(() => {
+    ipcMain.handle('loadUrl', (event, url) => loadUrl(url));
+    
     createWindow();
 
     app.on('activate', () => {
